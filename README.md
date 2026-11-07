@@ -2,6 +2,10 @@
 
 Neurito es un ajolote con tres necesidades: hambre, energía y aburrimiento. Una red neuronal (3 → 6 → 3) las recibe y decide si debe **comer**, **dormir** o **jugar**.
 
+El proyecto tiene dos partes:
+- **Neurito 1.0** (`main.py`): la mascota que decide qué necesita.
+- **Neurito 2.0** (`saltar.py`): Neurito aprende a saltar obstáculos. Ver [más abajo](#neurito-20-aprende-a-saltar).
+
 ## Cómo funciona
 
 1. **Datos de práctica:** el programa crea 3000 situaciones al azar. Para cada una, la acción correcta es la de la necesidad más fuerte entre hambre, cansancio (1 − energía) y aburrimiento.
@@ -95,3 +99,94 @@ Porque el 99 % solo mide qué tan bien copia la red la regla con la que se crear
 - Los errores se concentran en los casos casi empatados, donde la precisión baja a cerca del 87 % (consideramos casi empate cuando las dos necesidades más fuertes se diferencian en menos de 0.02).
 - La red siempre elige una acción, aunque Neurito no necesite nada.
 - Los datos de prueba vienen del mismo generador que los de entrenamiento, así que no muestran cómo se comportaría la red con datos distintos.
+---
+
+# Neurito 2.0: aprende a saltar
+
+Ahora Neurito corre por una pista y le llegan obstáculos a distintas velocidades. Una red neuronal (3 → 12 → 1) decide **cuándo saltar**.
+
+## Cómo funciona
+
+1. **Lo que ve la red:** la distancia al obstáculo, su velocidad y el tiempo que falta para que llegue (distancia ÷ velocidad).
+2. **Lo que responde:** un número entre 0 y 1. Si es 0.5 o más, Neurito salta.
+3. **Cómo aprende:** se crean 5000 ejemplos. Un ejemplo se marca como "saltar" si al obstáculo le faltan entre **7 y 13 fotogramas** para llegar; si no, se marca "esperar". La mitad de los ejemplos son de saltar, para que la red no aprenda a decir siempre "esperar".
+4. **Cómo se prueba:** con 1500 ejemplos nuevos y viendo cuántos obstáculos esquiva en el juego.
+
+## Cómo usarlo
+
+```bash
+uv run saltar.py
+```
+
+| Tecla | Qué hace |
+|---|---|
+| 1 | Entrena una época |
+| 2 | Entrena cien épocas |
+| 3 | Activa / pausa el entrenamiento continuo |
+| A | Cambia entre control automático (la red) y manual |
+| Espacio | Salta (en modo manual) |
+| C | Reinicia la pista y los contadores |
+| R | Reinicia el cerebro (borra lo aprendido) |
+| Esc | Salir |
+
+## Experimentos
+
+Los resultados del juego son de 2.5 minutos de partida (4500 fotogramas).
+
+**1. El juego sin entrenar**
+Neurito **nunca salta**: en 5 minutos esquivó 0 obstáculos y chocó 59 veces. Aun así la red marca 44.9 % de precisión, porque acierta todos los casos de "esperar" sin saber hacer nada más.
+
+**2. Entrenar de cien en cien épocas**
+
+| Épocas | Pérdida | Precisión | Esquivados | Choques |
+|---|---|---|---|---|
+| 0 | — | 44.9 % | 0 | 30 |
+| 100 | 0.260 | 91.2 % | 36 | 1 |
+| 300 | 0.207 | 92.3 % | 37 | 0 |
+| 500 | 0.137 | 94.1 % | 37 | 0 |
+| 1000 | 0.057 | 97.8 % | 37 | 0 |
+| 3000 | 0.022 | 99.1 % | 37 | 0 |
+
+Con solo 100 épocas Neurito ya esquiva casi todo, y desde 300 no vuelve a chocar. Después la pérdida y la precisión siguen mejorando, pero en el juego ya no se nota ningún cambio.
+
+**3. Neuronas ocultas: 3, 12 o 24** (3000 épocas)
+Se cambia `ocultas=12` en `salto_modelo.py`.
+
+| Neuronas | Precisión entrenamiento | Precisión prueba |
+|---|---|---|
+| 3 | 94.0 % | 93.7 % |
+| 12 | 99.3 % | 99.1 % |
+| 24 | 99.4 % | 99.3 % |
+
+En los tres casos la precisión con datos nuevos es casi igual a la de entrenamiento, así que la red **generaliza bien** y no memoriza. Con 3 neuronas le falta capacidad para marcar bien los bordes de la ventana. Con 24 casi no mejora frente a 12. En el juego, las tres esquivan todos los obstáculos.
+
+**4. Tasa de aprendizaje: 0.01, 0.8 o 1.2** (3000 épocas)
+Se cambia `tasa=0.8` en `salto_modelo.py`.
+- **0.01:** converge demasiado lento. Al final la pérdida sigue en 0.31 y la precisión en 88.6 %. En el juego **choca contra todo** (0 esquivados).
+- **0.8:** la pérdida baja de forma estable y nunca sube.
+- **1.2:** converge más rápido (99.6 %), pero la pérdida sube y baja 291 veces en el camino, porque los pasos son tan grandes que a veces se pasan del mínimo.
+
+**5. Cambiar la ventana de salto**
+En el juego, Neurito salta en el primer momento en que entra en la ventana, así que lo que más importa es el **límite superior**. Un salto dura unos 37 fotogramas, y Neurito queda por encima del obstáculo más o menos entre el fotograma 5 y el 32 del salto.
+
+| Ventana (fotogramas) | Esquivados | Choques | ¿Compatible con la física? |
+|---|---|---|---|
+| 1 a 4 | 0 | 30 | No: salta tan tarde que no alcanza a subir |
+| 2 a 5 | 37 | 0 | Sí, pero muy justo |
+| 7 a 13 (original) | 37 | 0 | Sí |
+| 12 a 16 | 37 | 0 | Sí, en el límite |
+| 12 a 18 | 28 | 6 | A medias: falla con obstáculos lentos |
+| 14 a 20 | 0 | 27 | No: salta tan pronto que cae antes del obstáculo |
+
+Con la ventana de 14 a 20, la red aprendió la regla con un **98.9 % de precisión** y aun así chocó las 27 veces. La red aprendió bien, pero lo que le enseñaron no sirve con esta física.
+
+## Pregunta central: ¿por qué una red puede tener buena precisión y aun así chocar?
+
+Porque la precisión y el juego miden cosas distintas:
+
+- **La precisión cuenta ejemplos sueltos; el juego depende de un solo momento.** Para esquivar basta con acertar el fotograma exacto en que se salta. Ese momento cae justo en el borde de la ventana (Neurito salta cuando faltan entre 13 y 14 fotogramas), y en los bordes la red acierta solo el **51.5 %**, frente al **98.6 %** lejos de ellos.
+- **Un solo error a destiempo basta para chocar.** Con tasa 0.01 la red tiene 88.6 % de precisión, pero se equivoca diciendo "saltar" demasiado pronto: salta cuando faltan unos 18 fotogramas, cae antes del obstáculo y choca las 27 veces.
+- **La regla puede no servir para la física.** Con la ventana de 14 a 20, la red copia la regla al 98.9 %, pero esa regla hace que Neurito salte antes de tiempo.
+- **Los datos de práctica no son iguales al juego.** En el entrenamiento la mitad de los ejemplos son de "saltar"; en el juego casi todos los fotogramas son de "esperar", y la red solo se juega la partida en unos pocos.
+
+En resumen: una precisión alta dice que la red **copia bien la regla**, no que Neurito **juegue bien**. Para eso también hace falta que la regla sea compatible con la física del salto.
